@@ -1,0 +1,355 @@
+# Prometheus Alert Rules
+# Comprehensive alerting for infrastructure, applications, and services
+
+groups:
+  # ============================================================
+  # Infrastructure Alerts - Node/System Level
+  # ============================================================
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      # High CPU Usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% (current: {{ $value | humanize }}%) on {{ $labels.instance }} for more than 5 minutes."
+          runbook: "https://runbooks.example.com/high-cpu-usage"
+          dashboard: "https://grafana.example.com/d/node-exporter"
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "CRITICAL: CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 95% (current: {{ $value | humanize }}%) on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/critical-cpu-usage"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% (current: {{ $value | humanize }}%) on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/high-memory-usage"
+
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "CRITICAL: Memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 95% (current: {{ $value | humanize }}%) on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/critical-memory-usage"
+
+      # Disk Space
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype=~"ext4|xfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space is below 20% (current: {{ $value | humanize }}%) on {{ $labels.instance }}:{{ $labels.mountpoint }}."
+          runbook: "https://runbooks.example.com/low-disk-space"
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{fstype=~"ext4|xfs"} / node_filesystem_size_bytes{fstype=~"ext4|xfs"}) * 100 < 10
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "CRITICAL: Disk space on {{ $labels.instance }}"
+          description: "Disk space is below 10% (current: {{ $value | humanize }}%) on {{ $labels.instance }}:{{ $labels.mountpoint }}."
+          runbook: "https://runbooks.example.com/critical-disk-space"
+
+      # Disk I/O
+      - alert: HighDiskIO
+        expr: rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "High disk I/O on {{ $labels.instance }}"
+          description: "Disk I/O utilization is high ({{ $value | humanize }}) on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/high-disk-io"
+
+      # Node Down
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+          team: platform
+        annotations:
+          summary: "Node {{ $labels.instance }} is down"
+          description: "Node exporter on {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook: "https://runbooks.example.com/node-down"
+
+  # ============================================================
+  # Application Alerts - Service Level
+  # ============================================================
+  - name: application_alerts
+    interval: 30s
+    rules:
+      # Service Down
+      - alert: ServiceDown
+        expr: up{job=~"web-api|backend-service|payment-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: application
+          team: engineering
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} on {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook: "https://runbooks.example.com/service-down"
+
+      # High HTTP Error Rate (5xx)
+      - alert: HighHTTPErrorRate
+        expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+          team: engineering
+        annotations:
+          summary: "High HTTP 5xx error rate on {{ $labels.service }}"
+          description: "HTTP 5xx error rate is {{ $value | humanize }}% on {{ $labels.service }}."
+          runbook: "https://runbooks.example.com/high-error-rate"
+
+      - alert: CriticalHTTPErrorRate
+        expr: (rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])) * 100 > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: application
+          team: engineering
+        annotations:
+          summary: "CRITICAL: HTTP 5xx error rate on {{ $labels.service }}"
+          description: "HTTP 5xx error rate is {{ $value | humanize }}% on {{ $labels.service }}."
+          runbook: "https://runbooks.example.com/critical-error-rate"
+
+      # High Latency
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+          team: engineering
+        annotations:
+          summary: "High latency on {{ $labels.service }}"
+          description: "95th percentile latency is {{ $value | humanize }}s on {{ $labels.service }}."
+          runbook: "https://runbooks.example.com/high-latency"
+
+      # Low Throughput
+      - alert: LowThroughput
+        expr: rate(http_requests_total[5m]) < 10
+        for: 10m
+        labels:
+          severity: warning
+          category: application
+          team: engineering
+        annotations:
+          summary: "Low request throughput on {{ $labels.service }}"
+          description: "Request rate is {{ $value | humanize }} req/s on {{ $labels.service }}."
+          runbook: "https://runbooks.example.com/low-throughput"
+
+      # API Endpoint Availability
+      - alert: APIEndpointDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+          team: engineering
+        annotations:
+          summary: "API endpoint {{ $labels.instance }} is down"
+          description: "Endpoint {{ $labels.instance }} has been unavailable for more than 2 minutes."
+          runbook: "https://runbooks.example.com/endpoint-down"
+
+  # ============================================================
+  # Database Alerts
+  # ============================================================
+  - name: database_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL Down
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+          team: dba
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook: "https://runbooks.example.com/postgresql-down"
+
+      # High Database Connections
+      - alert: HighDatabaseConnections
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          team: dba
+        annotations:
+          summary: "High database connections on {{ $labels.instance }}"
+          description: "Database connection usage is {{ $value | humanize }}% on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/high-db-connections"
+
+      # Slow Queries
+      - alert: SlowQueries
+        expr: rate(pg_stat_activity_max_tx_duration{state="active"}[5m]) > 60
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          team: dba
+        annotations:
+          summary: "Slow queries detected on {{ $labels.instance }}"
+          description: "Long-running queries detected on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/slow-queries"
+
+      # Replication Lag
+      - alert: ReplicationLag
+        expr: pg_replication_lag > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+          team: dba
+        annotations:
+          summary: "Replication lag on {{ $labels.instance }}"
+          description: "Replication lag is {{ $value | humanize }}s on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/replication-lag"
+
+      # Redis Down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: cache
+          team: platform
+        annotations:
+          summary: "Redis instance is down"
+          description: "Redis instance {{ $labels.instance }} has been down for more than 2 minutes."
+          runbook: "https://runbooks.example.com/redis-down"
+
+      # High Redis Memory Usage
+      - alert: HighRedisMemoryUsage
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+          team: platform
+        annotations:
+          summary: "High Redis memory usage on {{ $labels.instance }}"
+          description: "Redis memory usage is {{ $value | humanize }}% on {{ $labels.instance }}."
+          runbook: "https://runbooks.example.com/high-redis-memory"
+
+  # ============================================================
+  # Kubernetes Alerts (if applicable)
+  # ============================================================
+  - name: kubernetes_alerts
+    interval: 30s
+    rules:
+      # Pod Crash Looping
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: kubernetes
+          team: platform
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping."
+          runbook: "https://runbooks.example.com/pod-crash-loop"
+
+      # Pod Pending
+      - alert: PodPending
+        expr: kube_pod_status_phase{phase="Pending"} > 0
+        for: 10m
+        labels:
+          severity: warning
+          category: kubernetes
+          team: platform
+        annotations:
+          summary: "Pod {{ $labels.pod }} is pending"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been pending for more than 10 minutes."
+          runbook: "https://runbooks.example.com/pod-pending"
+
+      # Node NotReady
+      - alert: KubernetesNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: kubernetes
+          team: platform
+        annotations:
+          summary: "Kubernetes node {{ $labels.node }} is not ready"
+          description: "Node {{ $labels.node }} has been NotReady for more than 5 minutes."
+          runbook: "https://runbooks.example.com/node-not-ready"
+
+  # ============================================================
+  # Business Logic Alerts
+  # ============================================================
+  - name: business_alerts
+    interval: 30s
+    rules:
+      # High Payment Failure Rate
+      - alert: HighPaymentFailureRate
+        expr: (rate(payment_transactions_total{status="failed"}[5m]) / rate(payment_transactions_total[5m])) * 100 > 5
+        for: 5m
+        labels:
+          severity: critical
+          category: business
+          team: engineering
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value | humanize }}% in the last 5 minutes."
+          runbook: "https://runbooks.example.com/payment-failures"
+
+      # Low User Signups
+      - alert: LowUserSignups
+        expr: rate(user_signups_total[1h]) < 1
+        for: 1h
+        labels:
+          severity: warning
+          category: business
+          team: product
+        annotations:
+          summary: "Low user signup rate"
+          description: "User signup rate is {{ $value | humanize }} per hour."
+          runbook: "https://runbooks.example.com/low-signups"
