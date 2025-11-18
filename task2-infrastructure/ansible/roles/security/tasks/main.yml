@@ -1,0 +1,59 @@
+---
+# Security hardening tasks
+
+- name: Install fail2ban
+  package:
+    name: fail2ban
+    state: present
+
+- name: Configure fail2ban
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart fail2ban
+  when: fail2ban_enabled | default(true)
+
+- name: Install and configure UFW
+  when: ansible_os_family == "Debian" and ufw_enabled | default(true)
+  block:
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+    
+    - name: Set UFW default policies
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+    
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+    
+    - name: Allow HTTP and HTTPS
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ allowed_ports | default([]) }}"
+    
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+- name: Disable root login via SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin'
+    line: 'PermitRootLogin no'
+    backup: yes
+  notify: restart sshd
+

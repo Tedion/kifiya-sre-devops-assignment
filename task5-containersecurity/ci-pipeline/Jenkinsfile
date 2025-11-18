@@ -1,0 +1,226 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_REGISTRY = 'registry.example.com'
+        IMAGE_NAME = "${env.JOB_NAME}"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        TRIVY_CACHE_DIR = '.trivycache'
+        SLACK_WEBHOOK = credentials('slack-webhook-url')
+    }
+    
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                script {
+                    echo "Building Docker image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh """
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+        
+        stage('Vulnerability Scan') {
+            steps {
+                script {
+                    echo "Scanning image for vulnerabilities..."
+                    sh """
+                        mkdir -p ${TRIVY_CACHE_DIR}
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} \
+                            --format template --template '@contrib/junit.tpl' \
+                            -o trivy-report.xml \
+                            --exit-code 0 \
+                            --severity CRITICAL,HIGH,MEDIUM,LOW \
+                            ${IMAGE_NAME}:${IMAGE_TAG} || true
+                        
+                        # Generate HTML report
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} \
+                            --format template --template '@contrib/html.tpl' \
+                            -o trivy-report.html \
+                            --severity CRITICAL,HIGH,MEDIUM,LOW \
+                            ${IMAGE_NAME}:${IMAGE_TAG} || true
+                    """
+                }
+            }
+            post {
+                always {
+                    // Publish JUnit test results
+                    junit 'trivy-report.xml'
+                    
+                    // Archive HTML report
+                    archiveArtifacts artifacts: 'trivy-report.html', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Policy Enforcement') {
+            steps {
+                script {
+                    echo "Checking security policies..."
+                    
+                    // Check for critical/high vulnerabilities
+                    def scanResult = sh(
+                        script: """
+                            trivy image --cache-dir ${TRIVY_CACHE_DIR} \
+                                --exit-code 1 \
+                                --severity CRITICAL,HIGH \
+                                --no-progress \
+                                ${IMAGE_NAME}:${IMAGE_TAG} 2>&1 || echo "FAILED"
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (scanResult.contains("FAILED") || scanResult =~ /CRITICAL|HIGH/) {
+                        error("Security policy violation: Critical or High severity vulnerabilities found")
+                    }
+                    
+                    // Check for secrets
+                    sh """
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} \
+                            --security-checks secret \
+                            --exit-code 1 \
+                            --no-progress \
+                            ${IMAGE_NAME}:${IMAGE_TAG} || echo "Secret scan completed"
+                    """
+                    
+                    // Check for misconfigurations
+                    sh """
+                        trivy image --cache-dir ${TRIVY_CACHE_DIR} \
+                            --security-checks config \
+                            --exit-code 1 \
+                            --no-progress \
+                            ${IMAGE_NAME}:${IMAGE_TAG} || echo "Config scan completed"
+                    """
+                    
+                    // Verify base image is from approved registry
+                    def baseImage = sh(
+                        script: "docker inspect ${IMAGE_NAME}:${IMAGE_TAG} | jq -r '.[0].Config.Image'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    def approvedRegistries = ['docker.io/library', 'gcr.io', 'registry.example.com']
+                    def isApproved = approvedRegistries.any { baseImage.startsWith(it) }
+                    
+                    if (!isApproved) {
+                        error("Policy violation: Base image must be from approved registry")
+                    }
+                    
+                    // Check if container runs as root
+                    def userId = sh(
+                        script: "docker inspect ${IMAGE_NAME}:${IMAGE_TAG} | jq -r '.[0].Config.User // \"root\"'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (userId == "root" || userId == "0") {
+                        error("Policy violation: Container must not run as root user")
+                    }
+                }
+            }
+        }
+        
+        stage('Sign Image') {
+            steps {
+                script {
+                    echo "Signing container image..."
+                    // Image signing with cosign (example)
+                    sh """
+                        # cosign sign --key cosign.key ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        echo "Image signing would occur here"
+                    """
+                }
+            }
+        }
+        
+        stage('Push Image') {
+            when {
+                allOf {
+                    expression { env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master' }
+                    not { expression { currentBuild.result == 'FAILURE' } }
+                }
+            }
+            steps {
+                script {
+                    echo "Pushing image to registry..."
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh """
+                            echo ${DOCKER_PASS} | docker login ${DOCKER_REGISTRY} -u ${DOCKER_USER} --password-stdin
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                            docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest
+                        """
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                echo "Pipeline succeeded"
+                // Slack notification
+                sh """
+                    curl -X POST ${SLACK_WEBHOOK} \
+                        -H 'Content-Type: application/json' \
+                        -d '{
+                            "text": "✅ Build succeeded: ${IMAGE_NAME}:${IMAGE_TAG}",
+                            "attachments": [{
+                                "color": "good",
+                                "fields": [{
+                                    "title": "Image",
+                                    "value": "${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}",
+                                    "short": true
+                                }]
+                            }]
+                        }' || true
+                """
+            }
+        }
+        failure {
+            script {
+                echo "Pipeline failed"
+                // Slack notification with details
+                sh """
+                    curl -X POST ${SLACK_WEBHOOK} \
+                        -H 'Content-Type: application/json' \
+                        -d '{
+                            "text": "❌ Build failed: ${IMAGE_NAME}:${IMAGE_TAG}",
+                            "attachments": [{
+                                "color": "danger",
+                                "fields": [{
+                                    "title": "Build Number",
+                                    "value": "${env.BUILD_NUMBER}",
+                                    "short": true
+                                }, {
+                                    "title": "Console",
+                                    "value": "${env.BUILD_URL}console",
+                                    "short": true
+                                }]
+                            }]
+                        }' || true
+                """
+            }
+        }
+        always {
+            // Cleanup
+            sh """
+                docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true
+                docker system prune -f || true
+            """
+        }
+    }
+}
+

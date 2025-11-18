@@ -1,0 +1,50 @@
+---
+# Common system configuration tasks
+
+- name: Install essential packages
+  package:
+    name:
+      - curl
+      - wget
+      - git
+      - vim
+      - htop
+      - net-tools
+      - unzip
+    state: present
+
+- name: Configure timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Configure NTP
+  when: ansible_os_family == "Debian"
+  block:
+    - name: Install ntp
+      apt:
+        name: ntp
+        state: present
+    
+    - name: Configure NTP servers
+      template:
+        src: ntp.conf.j2
+        dest: /etc/ntp.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart ntp
+
+- name: Create ansible user
+  user:
+    name: ansible
+    groups: sudo
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Configure SSH for ansible user
+  authorized_key:
+    user: ansible
+    state: present
+    key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+

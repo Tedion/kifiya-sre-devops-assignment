@@ -1,0 +1,12 @@
+---
+# Web server specific variables
+web_server_type: nginx
+nginx_worker_processes: auto
+nginx_worker_connections: 1024
+nginx_keepalive_timeout: 65
+
+# Application configuration
+app_port: 8080
+app_user: www-data
+app_group: www-data
+

@@ -1,0 +1,22 @@
+---
+# Global variables for all hosts
+ansible_python_interpreter: /usr/bin/python3
+
+# System configuration
+timezone: UTC
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+# Security settings
+fail2ban_enabled: true
+ufw_enabled: true
+allowed_ports:
+  - 22
+  - 80
+  - 443
+
+# Monitoring
+monitoring_enabled: true
+prometheus_node_exporter_enabled: true
+

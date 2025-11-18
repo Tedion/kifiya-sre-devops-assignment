@@ -1,0 +1,8 @@
+---
+# Database server specific variables
+db_type: postgresql
+postgresql_version: "14"
+db_max_connections: 200
+db_shared_buffers: "256MB"
+db_effective_cache_size: "1GB"
+

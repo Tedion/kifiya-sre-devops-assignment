@@ -1,0 +1,18 @@
+---
+# Database server configuration tasks
+
+- name: Install PostgreSQL
+  when: db_type == "postgresql"
+  block:
+    - name: Install PostgreSQL
+      apt:
+        name: "postgresql-{{ postgresql_version }}"
+        state: present
+      when: ansible_os_family == "Debian"
+    
+    - name: Start and enable PostgreSQL
+      systemd:
+        name: "postgresql"
+        enabled: yes
+        state: started
+
