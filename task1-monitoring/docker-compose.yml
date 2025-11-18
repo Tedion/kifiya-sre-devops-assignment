@@ -1,0 +1,231 @@
+version: '3.8'
+
+# Monitoring Stack - Prometheus, Alertmanager, Grafana
+# Production-ready configuration with all exporters
+
+services:
+  # ============================================
+  # Core Monitoring Stack
+  # ============================================
+  
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    hostname: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - ./configs/recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: alertmanager
+    hostname: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./configs/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+      - '--cluster.advertise-address=0.0.0.0:9093'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: grafana
+    hostname: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_ALERTING_ENABLED=false  # Using Prometheus alerting
+      - GF_UNIFIED_ALERTING_ENABLED=false
+    volumes:
+      - ./configs/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # Exporters - System & Infrastructure
+  # ============================================
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    hostname: node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.netclass.ignored-devices=^(veth.*|docker.*|br.*)$$'
+      - '--collector.netdev.device-exclude=^(veth.*|docker.*|br.*)$$'
+    volumes:
+      - '/:/host:ro,rslave'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    pid: host
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: blackbox-exporter
+    hostname: blackbox-exporter
+    ports:
+      - "9115:9115"
+    volumes:
+      - ./configs/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    restart: unless-stopped
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9115/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Sample Application for Demo
+  # ============================================
+
+  sample-app:
+    image: nginx:alpine
+    container_name: sample-app
+    hostname: sample-app
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - monitoring
+    labels:
+      - "prometheus.io/scrape=true"
+      - "prometheus.io/port=80"
+      - "prometheus.io/path=/metrics"
+
+  # ============================================
+  # Database Exporters (Optional - Uncomment if needed)
+  # ============================================
+
+  # postgres-exporter:
+  #   image: prometheuscommunity/postgres-exporter:v0.15.0
+  #   container_name: postgres-exporter
+  #   hostname: postgres-exporter
+  #   ports:
+  #     - "9187:9187"
+  #   environment:
+  #     - DATA_SOURCE_NAME=postgresql://user:password@postgres:5432/dbname?sslmode=disable
+  #   restart: unless-stopped
+  #   networks:
+  #     - monitoring
+
+  # redis-exporter:
+  #   image: oliver006/redis_exporter:v1.55.0
+  #   container_name: redis-exporter
+  #   hostname: redis-exporter
+  #   ports:
+  #     - "9121:9121"
+  #   environment:
+  #     - REDIS_ADDR=redis:6379
+  #   restart: unless-stopped
+  #   networks:
+  #     - monitoring
+
+  # nginx-exporter:
+  #   image: nginx/nginx-prometheus-exporter:1.0.0
+  #   container_name: nginx-exporter
+  #   hostname: nginx-exporter
+  #   ports:
+  #     - "9113:9113"
+  #   command:
+  #     - '-nginx.scrape-uri=http://nginx:80/stub_status'
+  #   restart: unless-stopped
+  #   networks:
+  #     - monitoring
+
+  # rabbitmq-exporter:
+  #   image: kbudde/rabbitmq-exporter:v1.0.0-RC19
+  #   container_name: rabbitmq-exporter
+  #   hostname: rabbitmq-exporter
+  #   ports:
+  #     - "9419:9419"
+  #   environment:
+  #     - RABBIT_URL=http://rabbitmq:15672
+  #     - RABBIT_USER=guest
+  #     - RABBIT_PASSWORD=guest
+  #   restart: unless-stopped
+  #   networks:
+  #     - monitoring
+
+# ============================================
+# Networks
+# ============================================
+
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================
+# Volumes
+# ============================================
+
+volumes:
+  prometheus-data:
+    driver: local
+  alertmanager-data:
+    driver: local
+  grafana-data:
+    driver: local

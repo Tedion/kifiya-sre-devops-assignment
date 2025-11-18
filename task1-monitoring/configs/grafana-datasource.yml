@@ -1,0 +1,107 @@
+# Grafana Datasource Configuration
+# This file provisions Prometheus as a datasource in Grafana
+
+apiVersion: 1
+
+datasources:
+  # Primary Prometheus Datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod: POST
+      # Enable Exemplars for distributed tracing correlation
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+      # Custom HTTP headers (if needed for authentication)
+      # httpHeaderName1: 'Authorization'
+    # secureJsonData:
+    #   httpHeaderValue1: 'Bearer YOUR_TOKEN_HERE'
+
+  # Prometheus for Long-term Storage (Thanos/Cortex)
+  - name: Prometheus-LongTerm
+    type: prometheus
+    access: proxy
+    url: http://thanos-query:9090
+    editable: true
+    jsonData:
+      timeInterval: "30s"
+      queryTimeout: "120s"
+      httpMethod: POST
+
+  # Alertmanager Datasource
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: true
+    jsonData:
+      implementation: prometheus
+
+  # Loki for Log Aggregation (optional)
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "traceID=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+
+  # Tempo for Distributed Tracing (optional)
+  - name: Tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    uid: tempo
+    editable: true
+    jsonData:
+      tracesToLogs:
+        datasourceUid: loki
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags: [{ key: 'service.name', value: 'service' }]
+        mapTagNamesEnabled: false
+        spanStartTimeShift: '1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: false
+        filterBySpanID: false
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false
+      lokiSearch:
+        datasourceUid: loki
+
+  # PostgreSQL for Database Monitoring
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres-exporter:5432
+    database: monitoring
+    user: grafana_reader
+    editable: true
+    jsonData:
+      sslmode: "require"
+      postgresVersion: 1400
+      timescaledb: false
+    secureJsonData:
+      password: "YOUR_SECURE_PASSWORD_HERE"
+
+  # TestData for Dashboard Development
+  - name: TestData
+    type: testdata
+    access: proxy
+    editable: false
+    jsonData: {}

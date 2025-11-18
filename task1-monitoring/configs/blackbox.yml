@@ -1,0 +1,85 @@
+# Blackbox Exporter Configuration
+# HTTP, TCP, ICMP, and DNS probing
+
+modules:
+  # HTTP 2xx probe - successful response
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: []  # Defaults to 2xx
+      method: GET
+      follow_redirects: true
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+
+  # HTTP POST probe
+  http_post_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: POST
+      headers:
+        Content-Type: application/json
+      body: '{"test": "data"}'
+
+  # HTTP probe with basic auth
+  http_2xx_basic_auth:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: []
+      method: GET
+      basic_auth:
+        username: "username"
+        password: "password"
+
+  # HTTPS probe with SSL verification
+  https_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: []
+      method: GET
+      follow_redirects: true
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false
+
+  # TCP connection probe
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: "ip4"
+
+  # ICMP ping probe
+  icmp:
+    prober: icmp
+    timeout: 5s
+    icmp:
+      preferred_ip_protocol: "ip4"
+
+  # DNS probe - check resolution
+  dns_tcp:
+    prober: dns
+    timeout: 5s
+    dns:
+      transport_protocol: "tcp"
+      preferred_ip_protocol: "ip4"
+      query_name: "example.com"
+      query_type: "A"
+
+  # Check SSL certificate expiration
+  ssl_expiry:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false

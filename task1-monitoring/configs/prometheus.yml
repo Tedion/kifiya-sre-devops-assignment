@@ -1,0 +1,205 @@
+# Prometheus Configuration
+# Production-ready monitoring setup for microservices architecture
+
+global:
+  scrape_interval: 15s              # Default scrape interval
+  scrape_timeout: 10s               
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'production'
+    environment: 'prod'
+    region: 'us-east-1'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      timeout: 10s
+      api_version: v2
+
+# Rule files for alerting and recording rules
+rule_files:
+  - '/etc/prometheus/alert-rules.yml'
+  - '/etc/prometheus/recording-rules.yml'
+
+# Scrape configurations for various targets
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets:
+          - localhost:9090
+        labels:
+          service: 'prometheus'
+          tier: 'monitoring'
+
+  # Node Exporter - System metrics (CPU, Memory, Disk, Network)
+  - job_name: 'node-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - node-exporter-01:9100
+          - node-exporter-02:9100
+          - node-exporter-03:9100
+        labels:
+          environment: 'production'
+          tier: 'infrastructure'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+
+  # Application metrics - Web API
+  - job_name: 'web-api'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - web-api-01:8080
+          - web-api-02:8080
+          - web-api-03:8080
+        labels:
+          service: 'web-api'
+          tier: 'application'
+          version: 'v1.2.3'
+
+  # Application metrics - Backend Services
+  - job_name: 'backend-service'
+    scrape_interval: 15s
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - backend-01:8081
+          - backend-02:8081
+        labels:
+          service: 'backend-service'
+          tier: 'application'
+
+  # Database Exporters - PostgreSQL
+  - job_name: 'postgres-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+        labels:
+          service: 'postgresql'
+          tier: 'database'
+          role: 'primary'
+
+  # Database Exporters - Redis
+  - job_name: 'redis-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+        labels:
+          service: 'redis'
+          tier: 'cache'
+
+  # Kubernetes monitoring (if running in K8s)
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - role: node
+    scheme: https
+    tls_config:
+      ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+
+  # Blackbox Exporter - Endpoint monitoring
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://api.example.com/health
+          - https://app.example.com/health
+          - https://admin.example.com/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Nginx Exporter - Web server metrics
+  - job_name: 'nginx-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - nginx-exporter:9113
+        labels:
+          service: 'nginx'
+          tier: 'web-server'
+
+  # RabbitMQ Exporter - Message queue metrics
+  - job_name: 'rabbitmq-exporter'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - rabbitmq-exporter:9419
+        labels:
+          service: 'rabbitmq'
+          tier: 'messaging'
+
+  # Custom Application Metrics
+  - job_name: 'payment-service'
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - payment-service-01:8082
+          - payment-service-02:8082
+        labels:
+          service: 'payment-service'
+          tier: 'application'
+          criticality: 'high'
+
+# Remote write configuration (optional - for long-term storage)
+# remote_write:
+#   - url: "http://thanos-receiver:19291/api/v1/receive"
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 50
+#       min_shards: 1
+#       max_samples_per_send: 5000
+#       batch_send_deadline: 5s
+#       min_backoff: 30ms
+#       max_backoff: 100ms
+
+# Remote read configuration (optional)
+# remote_read:
+#   - url: "http://thanos-query:19192/api/v1/read"
+#     read_recent: true

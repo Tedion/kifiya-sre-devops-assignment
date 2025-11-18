@@ -1,0 +1,236 @@
+# Prometheus Recording Rules
+# Pre-computed aggregations for faster dashboard queries
+
+groups:
+  # ============================================================
+  # Infrastructure Recording Rules
+  # ============================================================
+  - name: infrastructure_recordings
+    interval: 30s
+    rules:
+      # CPU Usage by Instance
+      - record: instance:node_cpu:avg_utilization
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      - record: instance:node_cpu:max_utilization
+        expr: 100 - (min by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Memory Usage by Instance
+      - record: instance:node_memory:utilization
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+
+      - record: instance:node_memory:available_bytes
+        expr: node_memory_MemAvailable_bytes
+
+      # Disk Usage by Instance and Mount
+      - record: instance:node_filesystem:utilization
+        expr: (node_filesystem_size_bytes - node_filesystem_avail_bytes) / node_filesystem_size_bytes * 100
+
+      - record: instance:node_filesystem:available_bytes
+        expr: node_filesystem_avail_bytes
+
+      # Network Traffic
+      - record: instance:node_network:receive_bytes_rate
+        expr: rate(node_network_receive_bytes_total[5m])
+
+      - record: instance:node_network:transmit_bytes_rate
+        expr: rate(node_network_transmit_bytes_total[5m])
+
+      # Disk I/O
+      - record: instance:node_disk:read_bytes_rate
+        expr: rate(node_disk_read_bytes_total[5m])
+
+      - record: instance:node_disk:write_bytes_rate
+        expr: rate(node_disk_written_bytes_total[5m])
+
+  # ============================================================
+  # Application Recording Rules (RED Metrics)
+  # ============================================================
+  - name: application_recordings
+    interval: 30s
+    rules:
+      # Request Rate
+      - record: job:http_requests:rate5m
+        expr: sum by (job, instance, method, status) (rate(http_requests_total[5m]))
+
+      # Request Rate by Service
+      - record: service:http_requests:rate5m
+        expr: sum by (service) (rate(http_requests_total[5m]))
+
+      # Error Rate
+      - record: job:http_requests_errors:rate5m
+        expr: sum by (job, instance) (rate(http_requests_total{status=~"5.."}[5m]))
+
+      # Error Percentage
+      - record: job:http_requests:error_rate
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum by (job) (rate(http_requests_total[5m])) * 100
+
+      # Latency Percentiles
+      - record: job:http_request_duration:p50
+        expr: histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: job:http_request_duration:p95
+        expr: histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: job:http_request_duration:p99
+        expr: histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Request Success Rate (Apdex-like)
+      - record: job:http_requests:success_rate
+        expr: |
+          sum by (job) (rate(http_requests_total{status!~"5.."}[5m]))
+          /
+          sum by (job) (rate(http_requests_total[5m])) * 100
+
+  # ============================================================
+  # Database Recording Rules
+  # ============================================================
+  - name: database_recordings
+    interval: 30s
+    rules:
+      # Database Connection Usage
+      - record: instance:pg_connections:usage_percent
+        expr: (pg_stat_database_numbackends / pg_settings_max_connections) * 100
+
+      # Query Rate
+      - record: instance:pg_queries:rate5m
+        expr: rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])
+
+      # Transaction Commit Rate
+      - record: instance:pg_transactions:commit_rate5m
+        expr: rate(pg_stat_database_xact_commit[5m])
+
+      # Transaction Rollback Rate
+      - record: instance:pg_transactions:rollback_rate5m
+        expr: rate(pg_stat_database_xact_rollback[5m])
+
+      # Redis Hit Rate
+      - record: instance:redis:hit_rate
+        expr: |
+          rate(redis_keyspace_hits_total[5m])
+          /
+          (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100
+
+      # Redis Memory Usage
+      - record: instance:redis_memory:usage_percent
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100
+
+  # ============================================================
+  # Service Level Indicators (SLI)
+  # ============================================================
+  - name: sli_recordings
+    interval: 30s
+    rules:
+      # Availability SLI
+      - record: sli:availability:ratio_rate5m
+        expr: |
+          sum by (service) (rate(http_requests_total{status!~"5.."}[5m]))
+          /
+          sum by (service) (rate(http_requests_total[5m]))
+
+      # Latency SLI (% of requests under threshold)
+      - record: sli:latency:good_ratio_rate5m
+        expr: |
+          sum by (service) (rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
+          /
+          sum by (service) (rate(http_request_duration_seconds_count[5m]))
+
+      # Error Budget Burn Rate (for SLO monitoring)
+      - record: sli:error_budget:burn_rate_1h
+        expr: |
+          (1 - 
+            (sum by (service) (rate(http_requests_total{status!~"5.."}[1h])) 
+            / 
+            sum by (service) (rate(http_requests_total[1h])))
+          ) / (1 - 0.999)  # Assuming 99.9% SLO
+
+      - record: sli:error_budget:burn_rate_6h
+        expr: |
+          (1 - 
+            (sum by (service) (rate(http_requests_total{status!~"5.."}[6h])) 
+            / 
+            sum by (service) (rate(http_requests_total[6h])))
+          ) / (1 - 0.999)
+
+  # ============================================================
+  # Cluster-wide Aggregations
+  # ============================================================
+  - name: cluster_aggregations
+    interval: 60s
+    rules:
+      # Total Cluster CPU
+      - record: cluster:node_cpu:total_utilization
+        expr: avg(instance:node_cpu:avg_utilization)
+
+      # Total Cluster Memory
+      - record: cluster:node_memory:total_utilization
+        expr: avg(instance:node_memory:utilization)
+
+      # Total Request Rate
+      - record: cluster:http_requests:total_rate5m
+        expr: sum(job:http_requests:rate5m)
+
+      # Total Error Rate
+      - record: cluster:http_requests:total_error_rate
+        expr: |
+          sum(job:http_requests_errors:rate5m)
+          /
+          sum(job:http_requests:rate5m) * 100
+
+      # Service Count
+      - record: cluster:services:count
+        expr: count(up == 1)
+
+      # Failed Services Count
+      - record: cluster:services:down_count
+        expr: count(up == 0)
+
+  # ============================================================
+  # Business Metrics Aggregations
+  # ============================================================
+  - name: business_recordings
+    interval: 60s
+    rules:
+      # Payment Transaction Rate
+      - record: business:payment_transactions:rate5m
+        expr: sum(rate(payment_transactions_total[5m]))
+
+      # Payment Success Rate
+      - record: business:payment_transactions:success_rate
+        expr: |
+          sum(rate(payment_transactions_total{status="success"}[5m]))
+          /
+          sum(rate(payment_transactions_total[5m])) * 100
+
+      # User Signup Rate
+      - record: business:user_signups:rate1h
+        expr: rate(user_signups_total[1h])
+
+      # Active Users
+      - record: business:active_users:count
+        expr: count(user_active_session{status="active"})
+
+  # ============================================================
+  # Prometheus Self-Monitoring
+  # ============================================================
+  - name: prometheus_health
+    interval: 60s
+    rules:
+      # Scrape Duration
+      - record: prometheus:scrape_duration:p95
+        expr: histogram_quantile(0.95, rate(prometheus_target_interval_length_seconds_bucket[5m]))
+
+      # Time Series Count
+      - record: prometheus:tsdb:series_count
+        expr: prometheus_tsdb_head_series
+
+      # Scrape Sample Count
+      - record: prometheus:scrape:samples_scraped_rate
+        expr: rate(prometheus_tsdb_head_samples_appended_total[5m])
+
+      # Failed Scrapes
+      - record: prometheus:scrape:failed_rate
+        expr: rate(prometheus_target_scrapes_exceeded_sample_limit_total[5m]) + rate(prometheus_target_scrapes_sample_duplicate_timestamp_total[5m])
