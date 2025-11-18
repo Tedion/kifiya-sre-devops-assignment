@@ -1,5 +1,5 @@
 ---
-# Application server configuration tasks
+# Application server configuration
 
 - name: Install Python and pip
   package:
@@ -8,10 +8,9 @@
       - python3-pip
     state: present
 
-- name: Install application dependencies
-  pip:
-    name:
-      - gunicorn
-      - flask
+- name: Create application user
+  user:
+    name: "{{ app_user }}"
+    group: "{{ app_group }}"
+    create_home: yes
     state: present
-

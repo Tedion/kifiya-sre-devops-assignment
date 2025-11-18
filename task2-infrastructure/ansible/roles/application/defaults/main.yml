@@ -1,0 +1,4 @@
+---
+# Application role default variables
+app_user: appuser
+app_group: appuser

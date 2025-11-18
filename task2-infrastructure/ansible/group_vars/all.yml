@@ -11,12 +11,18 @@ ntp_servers:
 # Security settings
 fail2ban_enabled: true
 ufw_enabled: true
+ssh_port: 22
 allowed_ports:
   - 22
   - 80
   - 443
 
-# Monitoring
-monitoring_enabled: true
-prometheus_node_exporter_enabled: true
-
+# Common packages
+essential_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - net-tools
+  - unzip

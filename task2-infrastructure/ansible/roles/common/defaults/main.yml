@@ -1,0 +1,10 @@
+---
+# Common role default variables
+timezone: UTC
+ntp_enabled: true
+essential_packages:
+  - curl
+  - wget
+  - vim
+  - git
+  - htop

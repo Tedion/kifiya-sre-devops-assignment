@@ -1,0 +1,5 @@
+---
+# Application server specific variables
+app_environment: production
+app_user: appuser
+app_group: appuser
