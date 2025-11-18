@@ -24,17 +24,6 @@ datasources:
     # secureJsonData:
     #   httpHeaderValue1: 'Bearer YOUR_TOKEN_HERE'
 
-  # Prometheus for Long-term Storage (Thanos/Cortex)
-  - name: Prometheus-LongTerm
-    type: prometheus
-    access: proxy
-    url: http://thanos-query:9090
-    editable: true
-    jsonData:
-      timeInterval: "30s"
-      queryTimeout: "120s"
-      httpMethod: POST
-
   # Alertmanager Datasource
   - name: Alertmanager
     type: alertmanager
@@ -43,46 +32,6 @@ datasources:
     editable: true
     jsonData:
       implementation: prometheus
-
-  # Loki for Log Aggregation (optional)
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    editable: true
-    jsonData:
-      maxLines: 1000
-      derivedFields:
-        - datasourceUid: tempo
-          matcherRegex: "traceID=(\\w+)"
-          name: TraceID
-          url: "$${__value.raw}"
-
-  # Tempo for Distributed Tracing (optional)
-  - name: Tempo
-    type: tempo
-    access: proxy
-    url: http://tempo:3200
-    uid: tempo
-    editable: true
-    jsonData:
-      tracesToLogs:
-        datasourceUid: loki
-        tags: ['job', 'instance', 'pod', 'namespace']
-        mappedTags: [{ key: 'service.name', value: 'service' }]
-        mapTagNamesEnabled: false
-        spanStartTimeShift: '1h'
-        spanEndTimeShift: '1h'
-        filterByTraceID: false
-        filterBySpanID: false
-      serviceMap:
-        datasourceUid: prometheus
-      nodeGraph:
-        enabled: true
-      search:
-        hide: false
-      lokiSearch:
-        datasourceUid: loki
 
   # PostgreSQL for Database Monitoring
   - name: PostgreSQL
