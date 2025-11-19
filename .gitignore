@@ -30,3 +30,5 @@ secrets/
 *.crt
 !*.example.*
 *.env
+
+task1-monitoring/.env
