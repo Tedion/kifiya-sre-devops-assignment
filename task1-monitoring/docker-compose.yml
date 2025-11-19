@@ -16,8 +16,8 @@ services:
       - "9090:9090"
     volumes:
       - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./configs/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
-      - ./configs/recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - ./configs/alertrules.yml:/etc/prometheus/alertrules.yml:ro
+      - ./configs/recordingrules.yml:/etc/prometheus/recordingrules.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -78,7 +78,7 @@ services:
       - GF_ALERTING_ENABLED=false  # Using Prometheus alerting
       - GF_UNIFIED_ALERTING_ENABLED=false
     volumes:
-      - ./configs/grafana-datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./configs/grafanadatasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
       - grafana-data:/var/lib/grafana
     restart: unless-stopped
     networks:
