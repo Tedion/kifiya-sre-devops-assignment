@@ -1,477 +1,364 @@
-# Task 1: Monitoring & Alerting System
-
-## Overview
-
-Complete production-ready monitoring stack using Prometheus, Grafana, and Alertmanager for infrastructure and application monitoring with automated alerting and comprehensive observability.
-
-## Architecture
-
-See [architecture-diagram.png](./architecture-diagram.png) for complete system architecture and data flow.
-
-## Components
-
-- **Prometheus** (9090): Metrics collection, storage, and alerting engine
-- **Grafana** (3000): Visualization dashboards and analytics
-- **Alertmanager** (9093): Alert routing, grouping, and notifications
-- **Node Exporter** (9100): System-level metrics (CPU, memory, disk, network)
-- **Blackbox Exporter** (9115): Endpoint availability and response time monitoring
-- **Sample Application** (8080): Demo application for testing monitoring
-
-## Quick Start
-
-### Option 1: Using Management Script (Recommended)
-```bash
-# Start the entire monitoring stack
-./start.sh start
-
-# View service status and URLs
-./start.sh status
-
-# Import Grafana dashboards automatically
-./start.sh dashboards
-
-# View logs
-./start.sh logs
-
-# Stop services
-./start.sh stop
-```
-
-### Option 2: Using Docker Compose Directly
-```bash
-# Start all services
-docker-compose up -d
-
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-```
-
-## Access Services
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Prometheus | http://localhost:9090 | None |
-| Grafana | http://localhost:3000 | admin / admin123 |
-| Alertmanager | http://localhost:9093 | None |
-| Node Exporter | http://localhost:9100/metrics | None |
-| Blackbox Exporter | http://localhost:9115 | None |
-
-## Management Script Commands
-
-The `start.sh` script provides comprehensive stack management:
-
-| Command | Description |
-|---------|-------------|
-| `./start.sh start` | Start all services with configuration validation |
-| `./start.sh stop` | Stop all services |
-| `./start.sh restart` | Restart all running services |
-| `./start.sh status` | Display service status and access URLs |
-| `./start.sh logs [service]` | View logs (all services or specific service) |
-| `./start.sh backup` | Backup Prometheus and Grafana data |
-| `./start.sh dashboards` | Auto-import recommended Grafana dashboards |
-| `./start.sh test-alerts` | Test alerting system (triggers NodeDown alert) |
-| `./start.sh cleanup` | Remove all containers, networks, and volumes |
-| `./start.sh help` | Display help information |
-
-### Usage Examples
-```bash
-# Start with automatic validation
-./start.sh start
-
-# View Prometheus logs
-./start.sh logs prometheus
-
-# View Grafana logs
-./start.sh logs grafana
-
-# Check everything is running
-./start.sh status
-
-# Backup all monitoring data
-./start.sh backup
-
-# Test the alerting workflow
-./start.sh test-alerts
-```
-
-## Configuration Files
-
-### configs/prometheus.yml
-Main Prometheus configuration with:
-- **Scrape interval:** 15s (default), 30s (infrastructure)
-- **Evaluation interval:** 15s for alert rules
-- **Data retention:** 15 days
-- **External labels:** cluster, environment, region
-- **Scrape targets:** prometheus, node-exporter, blackbox-http, and more
-
-### configs/alertrules.yml
-Production-ready alert rules:
-- **25 alert rules** covering infrastructure and application monitoring
-- **Critical (P0):** NodeDown, CriticalCPUUsage, CriticalMemoryUsage, DiskSpaceCritical, ServiceDown, APIEndpointDown
-- **Warning (P1):** HighCPUUsage, HighMemoryUsage, DiskSpaceLow, HighLatency, ReplicationLag
-
-### configs/recordingrules.yml
-Pre-computed metrics for performance:
-- **42 recording rules** for faster queries and dashboard performance
-- Aggregated metrics for CPU, memory, disk, and network
-- Application-level SLI/SLO calculations
-
-### configs/alertmanager.yml
-Alert routing configuration:
-- Severity-based routing (Critical vs Warning)
-- Alert grouping by cluster and service
-- Configurable repeat intervals
-- Inhibition rules to prevent alert storms
-- **Critical alerts:** 15-minute repeat interval
-- **Warning alerts:** 1-hour repeat interval
-
-### configs/grafanadatasource.yml
-Auto-provisioned datasources:
-- Prometheus datasource (default)
-- Alertmanager datasource for alert visualization
-- Configured on Grafana startup
-
-### configs/blackbox.yml
-Endpoint monitoring configuration:
-- HTTP/HTTPS probes (http_2xx module)
-- TCP connectivity checks
-- ICMP ping tests
-- Configurable timeouts and validation
-
-## Alert Thresholds
-
-| Alert | Threshold | Duration | Severity |
-|-------|-----------|----------|----------|
-| NodeDown | up == 0 | 2 min | Critical |
-| CriticalCPUUsage | >95% | 2 min | Critical |
-| HighCPUUsage | >80% | 5 min | Warning |
-| CriticalMemoryUsage | >95% | 2 min | Critical |
-| HighMemoryUsage | >85% | 5 min | Warning |
-| DiskSpaceCritical | <10% free | 2 min | Critical |
-| DiskSpaceLow | <20% free | 5 min | Warning |
-| APIEndpointDown | probe_success == 0 | 2 min | Critical |
-
-## Grafana Dashboards
-
-Datasources are automatically provisioned on startup. Import recommended community dashboards:
-
-| Dashboard ID | Name | Description |
-|--------------|------|-------------|
-| 1860 | Node Exporter Full | Comprehensive system metrics and resource utilization |
-| 3662 | Prometheus 2.0 Stats | Prometheus performance and internal metrics |
-| 9578 | Alertmanager | Alert overview and notification status |
-| 7587 | Blackbox Exporter | Endpoint monitoring and availability metrics |
-
-### Auto-Import Using Script
-```bash
-./start.sh dashboards
-```
-
-The script will:
-1. Wait for Grafana to be ready
-2. Get the Prometheus datasource UID
-3. Download dashboards from Grafana.com
-4. Configure datasource mappings
-5. Import all dashboards automatically
-
-### Manual Import
-
-1. Navigate to http://localhost:3000
-2. Go to **Dashboards → Import**
-3. Enter Dashboard ID (e.g., `1860`)
-4. Click **Load**
-5. Select **Prometheus** as datasource
-6. Click **Import**
-
-## Design Decisions
-
-### Architecture Choices
-
-**Pull-Based Monitoring:** Prometheus scrapes metrics from targets, providing better control, security, and resilience compared to push-based systems.
-
-**Multi-Layer Alerting:** Dual severity levels (Critical/Warning) with different notification strategies ensure appropriate response times.
-
-**Service Mesh Ready:** Configuration supports both static targets and Kubernetes service discovery for scalability.
-
-### Performance Tuning
-
-**Scrape Intervals:**
-- 15s for application metrics (sub-minute alerting)
-- 30s for infrastructure metrics (resource optimization)
-- Balances data granularity with storage efficiency
-
-**Data Retention:**
-- 15 days local storage for recent data
-- Configurable remote write for long-term storage
-- TSDB compression for efficient storage
-
-### Threshold Rationale
-
-**CPU Thresholds:**
-- Warning at 80%: Provides 15-20% headroom for traffic spikes
-- Critical at 95%: Immediate intervention required
-
-**Memory Thresholds:**
-- Warning at 85%: Accounts for Linux filesystem cache
-- Critical at 95%: Prevents OOM conditions
-
-**Disk Space:**
-- Warning at 20%: Time for capacity planning
-- Critical at 10%: Immediate action required
-
-## Common Operations
-
-### Service Management
-```bash
-# Start everything
-./start.sh start
-
-# Check service health
-./start.sh status
-
-# View all logs in real-time
-./start.sh logs
-
-# View specific service logs
-./start.sh logs prometheus
-./start.sh logs grafana
-./start.sh logs alertmanager
-
-# Restart all services
-./start.sh restart
-
-# Stop all services
-./start.sh stop
-```
-
-### Prometheus Operations
-```bash
-# Reload configuration without restart
-curl -X POST http://localhost:9090/-/reload
-
-# Check configuration status
-curl http://localhost:9090/api/v1/status/config
-
-# View all targets
-curl http://localhost:9090/api/v1/targets
-
-# Check active alerts
-curl http://localhost:9090/api/v1/alerts
-
-# Query metrics
-curl 'http://localhost:9090/api/v1/query?query=up'
-```
-
-### Alertmanager Operations
-```bash
-# View all active alerts
-curl http://localhost:9093/api/v2/alerts
-
-# Check Alertmanager status
-curl http://localhost:9093/api/v2/status
-
-# Silence an alert (example)
-curl -X POST http://localhost:9093/api/v2/silences \
-  -H "Content-Type: application/json" \
-  -d '{"matchers":[{"name":"alertname","value":"HighCPUUsage","isRegex":false}],"startsAt":"2024-11-19T00:00:00Z","endsAt":"2024-11-20T00:00:00Z","createdBy":"admin","comment":"Planned maintenance"}'
-```
-
-### Grafana Operations
-```bash
-# Check datasources
-curl -s -u admin:admin123 http://localhost:3000/api/datasources | jq
-
-# List all dashboards
-curl -s -u admin:admin123 http://localhost:3000/api/search | jq
-
-# Check Grafana health
-curl http://localhost:3000/api/health
-```
-
-### Data Backup
-```bash
-# Backup Prometheus and Grafana data
-./start.sh backup
-
-# Backups are stored in: backups/YYYYMMDD_HHMMSS/
-# - prometheus-data.tar.gz
-# - grafana-data.tar.gz
-```
-
-## Troubleshooting
-
-### Services Won't Start
-```bash
-# Check port availability
-./start.sh start
-# Script automatically checks ports 9090, 9093, 3000, 9100, 9115
-
-# View service logs for errors
-./start.sh logs
-
-# Check Docker daemon
-docker info
-
-# Restart services
-./start.sh restart
-```
-
-### Configuration Errors
-```bash
-# Validate Prometheus config manually
-docker run --rm -v $(pwd)/configs/prometheus.yml:/prometheus.yml \
-  prom/prometheus:latest \
-  promtool check config /prometheus.yml
-
-# Validate alert rules
-docker run --rm -v $(pwd)/configs/alertrules.yml:/alertrules.yml \
-  prom/prometheus:latest \
-  promtool check rules /alertrules.yml
-```
-
-### Metrics Not Appearing
-```bash
-# Check Prometheus targets
-curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
-
-# Verify scrape configs in Prometheus UI
-open http://localhost:9090/targets
-
-# Check service discovery
-curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
-```
-
-### Grafana Datasource Issues
-```bash
-# Verify datasources are configured
-curl -s -u admin:admin123 http://localhost:3000/api/datasources | jq '.[].name'
-
-# Test Prometheus connectivity from Grafana
-curl -s -u admin:admin123 http://localhost:3000/api/datasources/proxy/1/api/v1/query?query=up
-
-# Re-import dashboards
-./start.sh dashboards
-```
-
-### Alert Not Firing
-```bash
-# Check alert rules are loaded
-curl http://localhost:9090/api/v1/rules | jq '.data.groups[].name'
-
-# View alert status
-open http://localhost:9090/alerts
-
-# Check Alertmanager is receiving alerts
-curl http://localhost:9093/api/v2/alerts | jq
-```
-
-### Complete Reset
-```bash
-# Remove everything and start fresh
-./start.sh cleanup
-./start.sh start
-./start.sh dashboards
-```
-
-## Metrics Collected
-
-### System Metrics (Node Exporter)
-
-- **CPU:** Usage by core, mode (user, system, idle, iowait)
-- **Memory:** Total, available, used, cached, buffers
-- **Disk:** Space usage, I/O operations, read/write bytes
-- **Network:** Traffic (bytes in/out), packets, errors, drops
-- **System:** Load average, uptime, processes, file descriptors
-
-### Application Metrics
-
-- **HTTP:** Request rate, latency (p50, p95, p99), status codes
-- **Errors:** 4xx and 5xx error rates
-- **Availability:** Service uptime and health check results
-- **Custom:** Business metrics exposed via /metrics endpoint
-
-### Endpoint Monitoring (Blackbox)
-
-- **Availability:** HTTP/HTTPS endpoint reachability
-- **Response Time:** DNS, TCP, TLS, and HTTP phases
-- **SSL Certificates:** Expiry monitoring
-- **Status Codes:** HTTP response validation
-
-## Project Structure
-```
-task1-monitoring/
-├── architecture-diagram.png         # System architecture diagram
-├── configs/
-│   ├── prometheus.yml              # Prometheus main configuration
-│   ├── alertrules.yml              # Alert rules (25 rules)
-│   ├── recordingrules.yml          # Recording rules (42 rules)
-│   ├── alertmanager.yml            # Alertmanager routing config
-│   ├── grafanadatasource.yml       # Grafana datasource provisioning
-│   └── blackbox.yml                # Blackbox exporter config
-├── docker-compose.yml              # Container orchestration
-├── start.sh                        # Management script
-├── .env                            # Environment variables (auto-generated)
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
-```
-
-## Security Considerations
-
-- Default Grafana credentials should be changed in production
-- Alertmanager webhook URLs stored in `.env` file (not committed)
-- All configuration files mounted read-only
-- Network isolation via Docker bridge network
-- Health checks enabled for all critical services
-
-## Performance Metrics
-
-### Resource Usage
-
-- **Prometheus:** ~200MB RAM, 1-2% CPU (15s scrape interval)
-- **Grafana:** ~100MB RAM, 1% CPU
-- **Alertmanager:** ~50MB RAM, <1% CPU
-- **Node Exporter:** ~20MB RAM, <1% CPU
-- **Blackbox Exporter:** ~15MB RAM, <1% CPU
-
-### Storage
-
-- **TSDB Storage:** ~1GB per day (depends on cardinality)
-- **Retention:** 15 days = ~15GB
-- **Compression:** Prometheus TSDB automatically compresses old data
-
-## Documentation & Resources
-
-### Official Documentation
-- [Prometheus Documentation](https://prometheus.io/docs/)
-- [Grafana Documentation](https://grafana.com/docs/)
-- [PromQL Guide](https://prometheus.io/docs/prometheus/latest/querying/basics/)
-- [Alertmanager Guide](https://prometheus.io/docs/alerting/latest/alertmanager/)
-
-### Component Documentation
-- [Node Exporter Metrics](https://github.com/prometheus/node_exporter)
-- [Blackbox Exporter](https://github.com/prometheus/blackbox_exporter)
-- [Grafana Dashboards](https://grafana.com/grafana/dashboards/)
-
-### Best Practices
-- [Prometheus Best Practices](https://prometheus.io/docs/practices/)
-- [Metric and Label Naming](https://prometheus.io/docs/practices/naming/)
-- [Alerting Best Practices](https://prometheus.io/docs/practices/alerting/)
-
-## Contributing
-
-This monitoring stack was created for the Kifiya SRE/DevOps take-home assignment. Improvements and suggestions are welcome.
-
----
-
-**Status:** Production-Ready ✅  
-**Technologies:** Prometheus 2.48+, Grafana 10.2+, Alertmanager 0.26+  
-**Created for:** Kifiya SRE/DevOps Assignment  
-**Task:** Monitoring, Observability & Alerting  
-**Author:** Teddy Abera  
-**Last Updated:** November 2025
+#!/bin/bash
+
+# Monitoring Stack Quick Start Script
+# This script sets up and manages the monitoring infrastructure
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Functions
+print_header() {
+    echo -e "${BLUE}================================================${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}================================================${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
+}
+
+check_prerequisites() {
+    print_header "Checking Prerequisites"
+    
+    # Check Docker
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is not installed"
+        exit 1
+    fi
+    print_success "Docker is installed"
+    
+    # Check Docker Compose
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        print_error "Docker Compose is not installed"
+        exit 1
+    fi
+    print_success "Docker Compose is installed"
+    
+    # Check if Docker daemon is running
+    if ! docker info > /dev/null 2>&1; then
+        print_error "Docker daemon is not running"
+        exit 1
+    fi
+    print_success "Docker daemon is running"
+    
+    # Check if ports are available
+    for port in 9090 9093 3000 9100 9115; do
+        if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
+            print_warning "Port $port is already in use"
+        else
+            print_success "Port $port is available"
+        fi
+    done
+}
+
+create_env_file() {
+    if [ ! -f .env ]; then
+        print_header "Creating .env file"
+        cat > .env << 'EOF'
+# Grafana Configuration
+GRAFANA_ADMIN_PASSWORD=admin123
+
+# Alertmanager Configuration
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+PAGERDUTY_SERVICE_KEY=your_pagerduty_key_here
+EMAIL_FROM=alerts@example.com
+EMAIL_TO=devops-team@example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=alerts@example.com
+SMTP_PASSWORD=your_smtp_password_here
+
+# Environment
+ENVIRONMENT=production
+CLUSTER_NAME=main-cluster
+EOF
+        print_success "Created .env file (please update with actual credentials)"
+    else
+        print_warning ".env file already exists"
+    fi
+}
+
+start_stack() {
+    print_header "Starting Monitoring Stack"
+
+    # Validate with all files mounted
+    print_warning "Validating Prometheus configuration..."
+    docker run --rm --entrypoint promtool \
+        -v $(pwd)/configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro \
+        -v $(pwd)/configs/alertrules.yml:/etc/prometheus/alertrules.yml:ro \
+        -v $(pwd)/configs/recordingrules.yml:/etc/prometheus/recordingrules.yml:ro \
+        prom/prometheus:latest \
+        check config /etc/prometheus/prometheus.yml
+    
+    # Start services
+    print_success "Configuration validated!"
+    echo ""
+    print_warning "Starting services..."
+    docker-compose up -d
+    
+    print_success "Monitoring stack is starting..."
+    sleep 10
+    
+    # Check health
+    echo ""
+    print_warning "Checking service health..."
+    docker-compose ps
+    
+    echo ""
+    print_success "All services started successfully!"
+}
+
+stop_stack() {
+    print_header "Stopping Monitoring Stack"
+    docker-compose down
+    print_success "Stack stopped"
+}
+
+restart_stack() {
+    print_header "Restarting Monitoring Stack"
+    docker-compose restart
+    print_success "Stack restarted"
+}
+
+view_logs() {
+    print_header "Viewing Logs"
+    docker-compose logs -f $1
+}
+
+show_status() {
+    print_header "Monitoring Stack Status"
+    docker-compose ps
+    echo ""
+    print_header "Service URLs"
+    echo -e "Prometheus:    ${GREEN}http://localhost:9090${NC}"
+    echo -e "Alertmanager:  ${GREEN}http://localhost:9093${NC}"
+    echo -e "Grafana:       ${GREEN}http://localhost:3000${NC} (admin/admin123)"
+    echo -e "Node Exporter: ${GREEN}http://localhost:9100/metrics${NC}"
+    echo -e "Blackbox:      ${GREEN}http://localhost:9115${NC}"
+    echo ""
+    
+    # Check Grafana datasources
+    print_warning "Checking Grafana datasources..."
+    sleep 2
+    datasource_count=$(curl -s -u admin:admin123 http://localhost:3000/api/datasources 2>/dev/null | jq '. | length' 2>/dev/null || echo "0")
+    if [ "$datasource_count" -gt 0 ]; then
+        print_success "Grafana datasources configured: $datasource_count"
+    else
+        print_warning "Grafana datasources not detected (may still be starting)"
+    fi
+}
+
+backup_data() {
+    print_header "Backing up Monitoring Data"
+    BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
+    mkdir -p $BACKUP_DIR
+    
+    print_warning "Backing up Prometheus data..."
+    docker-compose exec -T prometheus tar czf - /prometheus > $BACKUP_DIR/prometheus-data.tar.gz
+    
+    print_warning "Backing up Grafana data..."
+    docker-compose exec -T grafana tar czf - /var/lib/grafana > $BACKUP_DIR/grafana-data.tar.gz
+    
+    print_success "Backup created in $BACKUP_DIR"
+    ls -lh $BACKUP_DIR
+}
+
+import_dashboards() {
+    print_header "Importing Grafana Dashboards"
+    
+    # Wait for Grafana to be ready
+    print_warning "Waiting for Grafana to be ready..."
+    until curl -s http://localhost:3000/api/health > /dev/null 2>&1; do
+        echo "  Waiting..."
+        sleep 2
+    done
+    print_success "Grafana is ready!"
+    
+    echo ""
+    
+    # Get Prometheus datasource UID
+    print_warning "Getting Prometheus datasource UID..."
+    DATASOURCE_UID=$(curl -s -u admin:admin123 http://localhost:3000/api/datasources/name/Prometheus 2>/dev/null | jq -r '.uid' 2>/dev/null)
+    
+    if [ -z "$DATASOURCE_UID" ] || [ "$DATASOURCE_UID" == "null" ]; then
+        print_error "Could not find Prometheus datasource"
+        echo "Please ensure Grafana is fully started and datasources are provisioned"
+        echo "You can import dashboards manually at: http://localhost:3000"
+        return 1
+    fi
+    print_success "Found Prometheus datasource UID: $DATASOURCE_UID"
+    
+    echo ""
+    print_warning "Importing dashboards from Grafana.com..."
+    
+    # Dashboard IDs and names
+    declare -A DASHBOARDS=(
+        ["1860"]="Node Exporter Full"
+        ["3662"]="Prometheus 2.0 Stats"
+        ["9578"]="Alertmanager"
+        ["7587"]="Blackbox Exporter"
+    )
+    
+    for dashboard_id in "${!DASHBOARDS[@]}"; do
+        dashboard_name="${DASHBOARDS[$dashboard_id]}"
+        echo ""
+        echo "Importing: $dashboard_name (ID: $dashboard_id)"
+        
+        # Download dashboard JSON from Grafana.com
+        print_warning "  Downloading..."
+        dashboard_json=$(curl -s "https://grafana.com/api/dashboards/${dashboard_id}/revisions/latest/download" 2>/dev/null)
+        
+        if [ -z "$dashboard_json" ] || [ "$dashboard_json" == "null" ]; then
+            print_error "  Failed to download"
+            continue
+        fi
+        
+        # Replace ALL datasource references with our Prometheus UID
+        # This ensures it connects to our Prometheus, not Thanos or any other datasource
+        dashboard_json=$(echo "$dashboard_json" | \
+            sed "s/\${DS_PROMETHEUS}/$DATASOURCE_UID/g" | \
+            sed "s/\${DS_THANOS}/$DATASOURCE_UID/g" | \
+            sed "s/\"datasource\":\s*\"Prometheus\"/\"datasource\":\"$DATASOURCE_UID\"/g" | \
+            sed "s/\"uid\":\s*\"prometheus\"/\"uid\":\"$DATASOURCE_UID\"/g" | \
+            sed "s/\"uid\":\s*\"Prometheus\"/\"uid\":\"$DATASOURCE_UID\"/g")
+        
+        # Import to Grafana using correct API endpoint
+        print_warning "  Importing..."
+        response=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -u admin:admin123 \
+            -d "{\"dashboard\":$dashboard_json,\"overwrite\":true,\"folderId\":0}" \
+            http://localhost:3000/api/dashboards/db 2>&1)
+        
+        if echo "$response" | grep -q '"status":"success"'; then
+            print_success "  ✓ Imported: $dashboard_name"
+        else
+            print_error "  ✗ Failed: $dashboard_name"
+            # Show first 150 chars of error for debugging
+            echo "  $(echo $response | head -c 150)"
+        fi
+    done
+    
+    echo ""
+    print_success "Dashboard import completed!"
+    echo ""
+    echo "View dashboards: ${GREEN}http://localhost:3000/dashboards${NC}"
+}
+
+test_alerts() {
+    print_header "Testing Alerting System"
+    
+    # Stop node-exporter to trigger NodeDown alert
+    print_warning "Stopping node-exporter to trigger alert..."
+    docker-compose stop node-exporter
+    
+    echo ""
+    echo "Wait 2-3 minutes and check:"
+    echo "1. Prometheus: ${GREEN}http://localhost:9090/alerts${NC}"
+    echo "2. Alertmanager: ${GREEN}http://localhost:9093${NC}"
+    echo ""
+    read -p "Press Enter to restart node-exporter..."
+    
+    docker-compose start node-exporter
+    print_success "Node exporter restarted"
+}
+
+cleanup() {
+    print_header "Cleaning Up"
+    read -p "This will remove all containers and volumes. Continue? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        docker-compose down -v
+        print_success "Cleanup complete"
+    else
+        print_warning "Cleanup cancelled"
+    fi
+}
+
+show_help() {
+    cat << EOF
+Monitoring Stack Management Script
+
+Usage: $0 [COMMAND]
+
+Commands:
+    start           Start the monitoring stack
+    stop            Stop the monitoring stack
+    restart         Restart the monitoring stack
+    status          Show status and service URLs
+    logs [service]  View logs (optional: specify service)
+    backup          Backup Prometheus and Grafana data
+    dashboards      Import recommended Grafana dashboards
+    test-alerts     Test the alerting system
+    cleanup         Remove all containers and volumes
+    help            Show this help message
+
+Examples:
+    $0 start                 # Start all services
+    $0 logs prometheus       # View Prometheus logs
+    $0 dashboards           # Import dashboards from Grafana.com
+    $0 test-alerts          # Test alerting workflow
+    $0 status               # Show service status
+
+EOF
+}
+
+# Main script
+main() {
+    case "${1:-help}" in
+        start)
+            check_prerequisites
+            create_env_file
+            start_stack
+            show_status
+            ;;
+        stop)
+            stop_stack
+            ;;
+        restart)
+            restart_stack
+            ;;
+        status)
+            show_status
+            ;;
+        logs)
+            view_logs $2
+            ;;
+        backup)
+            backup_data
+            ;;
+        dashboards)
+            import_dashboards
+            ;;
+        test-alerts)
+            test_alerts
+            ;;
+        cleanup)
+            cleanup
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        *)
+            print_error "Unknown command: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
