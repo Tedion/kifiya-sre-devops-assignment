@@ -72,4 +72,4 @@ Scripted import grabs these IDs from Grafana.com and wires datasources automatic
 - Default creds and webhook secrets must be rotated for real environments.
 - All config mounts are read-only and run on an isolated Docker network.
 - Resource profile: Prometheus ~200 MB RAM, Grafana ~100 MB, rest <60 MB each.
-- Created by the Kifiya SRE/DevOps team, updated November 2025.
+- Created for the Kifiya SRE/DevOps team, updated November 2025.
